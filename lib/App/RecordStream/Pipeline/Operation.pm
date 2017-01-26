@@ -34,12 +34,7 @@ has next => (
     default => sub { App::RecordStream::Pipeline::Sink::ArrayRef->new },
 );
 
-has _operation => (
-    is      => 'lazy',
-    isa     => InstanceOf['App::RecordStream::Operation'],
-);
-
-sub _build__operation {
+sub _operation {
     my $self = shift;
     my $name = $self->name;
     my $args = $self->_processed_args;
@@ -109,13 +104,14 @@ sub _coderef_to_comment {
 }
 
 sub run {
-    my $self  = shift;
-    my $input = shift;
+    my $self      = shift;
+    my $input     = shift;
+    my $operation = $self->_operation;
     my $filename;
 
     # Not all operations want input, usually because they handle
     # reading/generating it themselves.
-    if ($self->_operation->wants_input) {
+    if ($operation->wants_input) {
         die "Input required for ", $self->name, "\n"
             unless $input;
 
@@ -135,7 +131,7 @@ sub run {
             while (my $line = <$input>) {
                 chomp $line;
                 App::RecordStream::Operation::set_current_filename( $$filename );
-                if (not $self->_operation->accept_line($line)) {
+                if (not $operation->accept_line($line)) {
                     last;
                 }
             }
@@ -143,10 +139,10 @@ sub run {
         # Array of lines or records
         elsif ((ArrayRef[Str] | ArrayRef[HashRef])->check($input)) {
             if (ref $input->[0]) {
-                $self->_operation->accept_record( App::RecordStream::Record->new($_) )
+                $operation->accept_record( App::RecordStream::Record->new($_) )
                     for @$input;
             } else {
-                $self->_operation->accept_line($_)
+                $operation->accept_line($_)
                     for @$input;
             }
         }
@@ -154,7 +150,7 @@ sub run {
             die "Unknown input: ", $self->_dump($input);
         }
     }
-    $self->_operation->finish;
+    $operation->finish;
     return $self->output_sink;
 }
 
