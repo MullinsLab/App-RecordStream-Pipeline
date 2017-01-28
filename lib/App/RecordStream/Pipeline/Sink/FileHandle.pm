@@ -12,7 +12,7 @@ use namespace::clean;
 has handle => (
     is      => 'ro',
     isa     => FileHandle,
-    default => sub { \*STDIN },
+    default => sub { \*STDOUT },
 );
 
 sub accept_line {

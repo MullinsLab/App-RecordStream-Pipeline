@@ -4,7 +4,6 @@ requires 'App::RecordStream::Stream::Base';
 requires 'B::Deparse';
 requires 'Data::Dumper';
 requires 'Exporter::Tiny';
-requires 'IO::String';
 requires 'Moo';
 requires 'parent';
 requires 'Scalar::Util';
