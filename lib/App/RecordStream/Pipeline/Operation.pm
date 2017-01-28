@@ -85,6 +85,75 @@ has next => (
     default => sub { App::RecordStream::Pipeline::Sink::ArrayRef->new },
 );
 
+
+=head1 METHODS
+
+=head2 run
+
+Constructs and runs the chain of operations.  It generally only makes sense to
+call this on the first operation in a chain.
+
+If the operation doesn't handle its own input (like C<fromcsv>), then an input
+value is required as the sole argument.
+
+The input may be an open file handle, an arrayref of strings, or an arrayref of
+hashrefs (records).  Each line or hashref is fed into the operation.
+
+Returns the chain's sink via L</output_sink>.
+
+=cut
+
+sub run {
+    my $self      = shift;
+    my $input     = shift;
+    my $operation = $self->_operation;
+    my $filename;
+
+    # Not all operations want input, usually because they handle
+    # reading/generating it themselves.
+    if ($operation->wants_input) {
+        die "Input required for ", $self->name, "\n"
+            unless $input;
+
+        # STDIN, ARGV, DATA, or some other handle
+        if (FileHandle->check($input)) {
+            my %special = (
+                \*ARGV  => \$ARGV,      # XXX TODO: This won't work because FileHandle->check(\*ARGV)
+                                        # is false!  (Due to Scalar::Util::openhandle())
+                \*DATA  => \'__DATA__', # XXX TODO: This won't work because \*DATA isn't global!
+                \*STDIN => \'stdin',
+            );
+
+            my $filename = $special{$input}
+                ? $special{$input}
+                : \sprintf "fd#%d", fileno($input);
+
+            while (my $line = <$input>) {
+                chomp $line;
+                App::RecordStream::Operation::set_current_filename( $$filename );
+                if (not $operation->accept_line($line)) {
+                    last;
+                }
+            }
+        }
+        # Array of lines or records
+        elsif ((ArrayRef[Str] | ArrayRef[HashRef])->check($input)) {
+            if (ref $input->[0]) {
+                $operation->accept_record( App::RecordStream::Record->new($_) )
+                    for @$input;
+            } else {
+                $operation->accept_line($_)
+                    for @$input;
+            }
+        }
+        else {
+            die "Unknown input: ", $self->_dump($input);
+        }
+    }
+    $operation->finish;
+    return $self->output_sink;
+}
+
 sub _operation {
     my $self = shift;
     my $name = $self->name;
@@ -154,74 +223,6 @@ sub _coderef_to_comment {
     return $text;
 }
 
-
-=head1 METHODS
-
-=head2 run
-
-Constructs and runs the chain of operations.  It generally only makes sense to
-call this on the first operation in a chain.
-
-If the operation doesn't handle its own input (like C<fromcsv>), then an input
-value is required as the sole argument.
-
-The input may be an open file handle, an arrayref of strings, or an arrayref of
-hashrefs (records).  Each line or hashref is fed into the operation.
-
-Returns the chain's sink via L</output_sink>.
-
-=cut
-
-sub run {
-    my $self      = shift;
-    my $input     = shift;
-    my $operation = $self->_operation;
-    my $filename;
-
-    # Not all operations want input, usually because they handle
-    # reading/generating it themselves.
-    if ($operation->wants_input) {
-        die "Input required for ", $self->name, "\n"
-            unless $input;
-
-        # STDIN, ARGV, DATA, or some other handle
-        if (FileHandle->check($input)) {
-            my %special = (
-                \*ARGV  => \$ARGV,      # XXX TODO: This won't work because FileHandle->check(\*ARGV)
-                                        # is false!  (Due to Scalar::Util::openhandle())
-                \*DATA  => \'__DATA__', # XXX TODO: This won't work because \*DATA isn't global!
-                \*STDIN => \'stdin',
-            );
-
-            my $filename = $special{$input}
-                ? $special{$input}
-                : \sprintf "fd#%d", fileno($input);
-
-            while (my $line = <$input>) {
-                chomp $line;
-                App::RecordStream::Operation::set_current_filename( $$filename );
-                if (not $operation->accept_line($line)) {
-                    last;
-                }
-            }
-        }
-        # Array of lines or records
-        elsif ((ArrayRef[Str] | ArrayRef[HashRef])->check($input)) {
-            if (ref $input->[0]) {
-                $operation->accept_record( App::RecordStream::Record->new($_) )
-                    for @$input;
-            } else {
-                $operation->accept_line($_)
-                    for @$input;
-            }
-        }
-        else {
-            die "Unknown input: ", $self->_dump($input);
-        }
-    }
-    $operation->finish;
-    return $self->output_sink;
-}
 
 =head2 output_sink
 
