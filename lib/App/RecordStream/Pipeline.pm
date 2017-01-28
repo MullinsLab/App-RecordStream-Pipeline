@@ -14,7 +14,51 @@ use List::Util qw< reduce >;
 use Types::Standard qw< :types >;
 use namespace::clean;
 
+=head1 NAME
+
+App::RecordStream::Pipeline
+
+=head1 SYNOPSIS
+
+    use App::RecordStream::Pipeline;
+    my $pipeline = recs->fromcsv(qw[ --header --strict ], "data.csv")
+                       ->grep( sub { $_->{age} >= 21 } )
+                       ->sort( qw[ --key income=-numeric ])
+                       ->totable;
+
+    print $pipeline->run;
+
+=head1 DESCRIPTION
+
+App::RecordStream::Pipeline provides a programmatic interface for using
+L<App::RecordStream> operations in a Perl script. Pipelines are built up with
+chained method calls, and the resulting objects may then be composed with each
+other.
+
+=head1 EXPORTS
+
+=head2 recs
+
+A shortcut for App::RecordStream::Pipeline->new, providing a convenient
+way to start a pipeline
+
+=cut
+
 our @EXPORT = qw< recs >;
+
+sub recs {
+    App::RecordStream::Pipeline->new
+};
+
+=head1 METHODS
+
+=head2 recs operations
+
+An instance of App::RecordStream::Pipeline has methods corresponding to all
+L<App::RecordStream::Operation> packages found in C<@INC>. Each takes the same
+options and arguments as that operation takes in the command line version of C<recs>.
+
+=cut
 
 my @operations = map { s/^App::RecordStream::Operation:://; $_ }
                  App::RecordStream->operation_packages;
@@ -22,16 +66,18 @@ for my $op (@operations) {
     no strict "refs";
     *{"$op"} = sub { my $self = shift; $self->_chain_operation($op, @_); };
 }
-
-sub recs {
-    App::RecordStream::Pipeline->new
-};
-
 has pipeline => (
     is      => 'ro',
     isa     => ArrayRef,
     default => sub { [] },
 );
+
+=head2 then
+
+Given an L<App::RecordStream::Pipeline>, returns a pipeline where the
+argument's operations follow the caller's.
+
+=cut
 
 sub then {
     my $self = shift;
@@ -49,6 +95,37 @@ sub _chain_operation {
         pipeline => [ $op, @{$self->pipeline} ]
     );
 }
+
+=head2 run
+
+Run the pipeline operations, passing the output of each to the input of the next.
+
+=head3 parameters
+
+=over 4
+
+=item input
+
+If a filehandle, its contents will be read as lines and provided as input to
+the pipeline's first operation. If an array reference of strings, ditto. If an
+array reference of hashrefs, each entry will be passed as a record to the
+pipeline's first operation, without parsing.
+
+Not all operations look for input; the "from*" operations generally take a list
+of filenames as arguments, and read from STDIN otherwise. Operations that
+transform records into different records will generally accept input given in
+the L</input> parameter to L</run> parameter.
+
+=item output
+
+A filehandle to which output will be streamed as text, whether as JSON records
+or formatted output from a "to*" operation. If L</output> is provided, it will
+be used as the return value of L</run>. Otherwise, L</run> returns a string
+(for "to*" operations that generate output) or a list of hashrefs (for
+operations that return records).
+
+=back
+=cut
 
 sub run {
     my $self = shift;
