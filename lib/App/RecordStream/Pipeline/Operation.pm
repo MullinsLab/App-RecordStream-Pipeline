@@ -3,6 +3,8 @@ use warnings;
 use utf8;
 use 5.010;
 
+=encoding UTF-8
+
 =head1 NAME
 
 App::RecordStream::Pipeline::Operation - One link in a chain of operations
@@ -246,5 +248,66 @@ sub _dump {
     my $self = shift;
     return Data::Dumper->new([@_])->Terse(1)->Dump;
 }
+
+
+=head1 OPERATION ARGUMENTS
+
+All of the standard operation classes expect to instantiate themselves using
+only a list of strings as parameters.  While this makes sense from the
+historical perspective of being rooted in the command-line, it makes
+instantiation from Perl unusual and a bit limiting.
+
+Currently, operation arguments are only minimally transformed by this wrapper
+before being passed to the underlying operation class.  See the following
+sections for more information.
+
+As we acquire more real-world usage, we're likely to add a more convenient and
+natural way to specify operation parameters.  Until then, a list will do!
+
+=head2 SNIPPETS AND CODEREFS
+
+Many recs commands take snippets of Perl code which are run in the context of
+some standard variables and functions.  When using this class though, it's
+natural to want to pass coderefs instead of string literals containing Perl
+code.  When a coderef is passed, this wrapper stores the coderef in a registry
+and replaces it in the argument list with a string of Perl calling the
+registered coderef.  Your coderef will be called with the current record —
+C<$r> in a snippet — as both the first argument and the value of Perl's topic
+variable, C<$_>.
+
+Note that many other implicit variables such as the xform context variables
+(C<$A> and C<$B>), the global C<$line>, and the joined database record (C<$d>)
+are not yet available to your coderef.  Functions like xform's
+C<push_output()>, collate's aggregators, and those composing the domain
+language are also not available.   We plan to address this limitation in the
+future.
+
+Below is an example of using a coderef as an argument and also what the
+generated snippet looks like (thanks to the assert operation's printing of it):
+
+    use App::RecordStream::Pipeline;
+    recs->assert( sub { $_->{status} == 42 } )
+        ->run( input => [{ status => 13 }] );
+
+When the above is run, it outputs:
+
+    Assertion failed!
+    Expression: «
+    # {
+    #     no strict;
+    # #line 1 "-e"
+    #     $_->{'status'} == 42;
+    # }
+    { local $_ = $r;
+      $App::RecordStream::Pipeline::Operation::__SUBS{ q{140315323451520} }->($r) }
+     »
+    Filename: NONE
+    Line: 0
+
+Note that the source of your original coderef, as mangled by L<B::Deparse>, is
+included as a I<comment> in the snippet for easier debugging purposes.  It's
+not perfect and obviously not the original, but it's better than nothing.
+
+=cut
 
 1;
