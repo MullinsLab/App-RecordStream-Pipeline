@@ -55,8 +55,11 @@ sub recs {
 =head2 recs operations
 
 An instance of App::RecordStream::Pipeline has methods corresponding to all
-L<App::RecordStream::Operation> packages found in C<@INC>. Each takes the same
-options and arguments as that operation takes in the command line version of C<recs>.
+L<App::RecordStream::Operation> packages found in C<@INC>. The arguments to
+each method are equivalent to the operation's command line arguments in the
+C<recs> tool. You can run C<< recs help <operation-name> >> to list them.
+
+The complete details are at L<App::RecordStream::Pipeline::Operation/OPERATION ARGUMENTS>.
 
 =cut
 
